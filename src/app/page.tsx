@@ -135,18 +135,7 @@ export default function Dashboard() {
 
   // Load from localStorage & check profile (with auth)
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        if (url && !url.includes('placeholder') && !url.includes('your-project') && !session) {
-          window.location.href = "/login";
-          return;
-        }
-      } catch {
-        // Supabase not configured, continue with local mode
-      }
-
+    const loadData = () => {
       if (!hasProfile()) {
         window.location.href = "/start";
         return;
@@ -162,6 +151,41 @@ export default function Dashboard() {
       setCalendarConnectedState(isCalendarConnected());
       setIsPublic(localStorage.getItem('reading-public-profile') === 'true');
       setChallengeTypeState(getChallengeType());
+    };
+
+    const checkAuth = async () => {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const isSupabaseConfigured = url && !url.includes('placeholder') && !url.includes('your-project');
+
+      if (!isSupabaseConfigured) {
+        loadData();
+        return;
+      }
+
+      // Listen for auth state changes (handles OAuth redirect)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          loadData();
+        }
+      });
+
+      // Check existing session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        loadData();
+      } else {
+        // Wait a moment for OAuth redirect to complete
+        setTimeout(async () => {
+          const { data: { session: retrySession } } = await supabase.auth.getSession();
+          if (retrySession) {
+            loadData();
+          } else {
+            window.location.href = "/login";
+          }
+        }, 1000);
+      }
+
+      return () => subscription.unsubscribe();
     };
     checkAuth();
   }, []);
