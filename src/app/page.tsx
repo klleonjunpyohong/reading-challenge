@@ -162,9 +162,20 @@ export default function Dashboard() {
         return;
       }
 
-      // Listen for auth state changes (handles OAuth redirect)
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN' && session) {
+      // Handle OAuth hash tokens (Google login redirects with #access_token=...)
+      if (window.location.hash && window.location.hash.includes('access_token')) {
+        const { data, error } = await supabase.auth.getSession();
+        if (!error && data.session) {
+          loadData();
+          return;
+        }
+        // Wait for Supabase to process the hash
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+
+      // Listen for auth state changes
+      supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session && !mounted) {
           loadData();
         }
       });
@@ -174,7 +185,7 @@ export default function Dashboard() {
       if (session) {
         loadData();
       } else {
-        // Wait a moment for OAuth redirect to complete
+        // Wait for potential OAuth redirect
         setTimeout(async () => {
           const { data: { session: retrySession } } = await supabase.auth.getSession();
           if (retrySession) {
@@ -182,10 +193,8 @@ export default function Dashboard() {
           } else {
             window.location.href = "/login";
           }
-        }, 1000);
+        }, 2000);
       }
-
-      return () => subscription.unsubscribe();
     };
     checkAuth();
   }, []);
