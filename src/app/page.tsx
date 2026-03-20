@@ -180,6 +180,12 @@ export default function Dashboard() {
         }
       });
 
+      // If user has a local profile (guest mode), skip auth check
+      if (hasProfile()) {
+        loadData();
+        return;
+      }
+
       // Check existing session
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
