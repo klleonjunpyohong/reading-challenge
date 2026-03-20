@@ -153,52 +153,42 @@ export default function Dashboard() {
       setChallengeTypeState(getChallengeType());
     };
 
+    // Guest mode: if local profile exists, skip all auth
+    if (hasProfile()) {
+      loadData();
+      return;
+    }
+
     const checkAuth = async () => {
       const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const isSupabaseConfigured = url && !url.includes('placeholder') && !url.includes('your-project');
 
       if (!isSupabaseConfigured) {
-        loadData();
+        window.location.href = "/start";
         return;
       }
 
-      // Handle OAuth hash tokens (Google login redirects with #access_token=...)
+      // Handle OAuth hash tokens
       if (window.location.hash && window.location.hash.includes('access_token')) {
-        const { data, error } = await supabase.auth.getSession();
-        if (!error && data.session) {
-          loadData();
-          return;
-        }
-        // Wait for Supabase to process the hash
         await new Promise(resolve => setTimeout(resolve, 1500));
+        const { data } = await supabase.auth.getSession();
+        if (data.session) { loadData(); return; }
       }
 
       // Listen for auth state changes
       supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN' && session && !mounted) {
-          loadData();
-        }
+        if (event === 'SIGNED_IN' && session) loadData();
       });
-
-      // If user has a local profile (guest mode), skip auth check
-      if (hasProfile()) {
-        loadData();
-        return;
-      }
 
       // Check existing session
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         loadData();
       } else {
-        // Wait for potential OAuth redirect
         setTimeout(async () => {
-          const { data: { session: retrySession } } = await supabase.auth.getSession();
-          if (retrySession) {
-            loadData();
-          } else {
-            window.location.href = "/login";
-          }
+          const { data: { session: s } } = await supabase.auth.getSession();
+          if (s) loadData();
+          else window.location.href = "/login";
         }, 2000);
       }
     };
